@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Check Draft — opportunities</title><link rel="stylesheet" href="options.css"><script src="checker.js" defer></script><script src="options.js" defer></script></head>
+<body><main>
+  <h1>Opportunities</h1>
+  <p id="activation" role="alert"></p>
+  <p>Save up to 50 opportunities, including different roles for the same recipient. Select one explicitly in each compose. Facts stay in this Chrome profile; draft text is never saved.</p>
+  <p>Unknown facts, including recipient email, may be omitted. Missing facts leave their comparisons pending. Dates and times require labeled draft fields and are compared literally. Each fact or alias allows 1–200 UTF-16 units, with up to 10 aliases per list. The saved set allows 52,000 UTF-8 bytes.</p>
+  <fieldset id="editor" disabled>
+    <legend>Proposed opportunities</legend>
+    <div id="records"></div>
+    <button id="add" type="button">Add opportunity</button>
+  </fieldset>
+  <button id="save" disabled>Save opportunities</button>
+  <button id="verify">Verify saved state (keep edits)</button>
+  <button id="reload">Discard edits and reload</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <details><summary>Exact committed state / recovery evidence</summary><pre id="committed"></pre></details>
+</main></body></html>

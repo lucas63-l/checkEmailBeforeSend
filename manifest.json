@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "114",
+  "name": "Check Draft for Gmail",
+  "version": "1.0.0",
+  "description": "Read-only, local consistency checks for individual Gmail drafts.",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://mail.google.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://mail.google.com/*"],
+    "js": ["extract.js", "content.js"],
+    "run_at": "document_idle",
+    "all_frames": true
+  }],
+  "options_page": "options.html",
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'" }
+}
