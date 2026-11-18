@@ -1,11 +1,21 @@
 # Check Draft for Gmail
 
-A Manifest V3 Chrome extension in `D:\checkDraftExtension`. Each compose editor gets a local, read-only checker and an explicit opportunity selector. The extension never rewrites, sends, or discards emails. It has no production dependencies, networking, telemetry, credentials, or external inference.
+A Manifest V3 Chrome extension that checks individual Gmail drafts for inconsistent recipient and application details, missing attachments, and leftover placeholders. Each compose editor gets a local, read-only checker and an explicit opportunity selector. The extension never rewrites, sends, or discards emails. It has no production dependencies, networking, telemetry, credentials, or external inference.
+
+## Features
+
+- Compare supported company, role, and greeting phrases with saved opportunity facts.
+- Flag explicit attachment claims when no attachment is found, and check filenames for conflicting details.
+- Find placeholders such as `[NAME]`, `[COMPANY]`, and `{{...}}`.
+- Inspect exact evidence, the checked snapshot, and checks that remain incomplete.
+- Save up to 50 opportunities locally, including different roles for the same recipient.
+
+Checks use bounded English rules. Review the findings and incomplete coverage before sending.
 
 ## Install and use
 
-1. Open `chrome://extensions` and enable **Developer mode**.
-2. Select **Load unpacked**, then select `D:\checkDraftExtension`.
+1. In Chrome 114 or later, open `chrome://extensions` and enable **Developer mode**.
+2. Select **Load unpacked**, then select this repository's root folder, which contains `manifest.json`. No build or dependency installation is required to use the extension.
 3. Open Gmail. Existing and newly opened editors receive controls automatically. Analysis runs only when you select **Check draft**.
 4. Open **Recipient facts** to manage opportunities through the form. Add any known recipient email, name, company, role, location, event date, event time, or aliases. Unknown facts, including email, are optional. Add aliases individually so multiline values remain one alias. Save the proposed set.
 5. In each compose, select **Opportunity for this compose**. Nothing is selected automatically, even for a unique recipient. Different drafts may select different roles for the same email.
@@ -79,17 +89,38 @@ Extraction preserves text-node Unicode, whitespace, punctuation, and line breaks
 
 Saved opportunities persist in this Chrome profile until removed or uninstalled. Installation diagnostics contain tab IDs and error messages. Production code does not write draft text to storage or test output. Rendering uses safe text APIs. Gmail-only host permissions, storage and scripting permissions, and `connect-src 'none'` remain unchanged.
 
-## Verification reference
+## Development
 
-The existing Node, npm, node_modules, installed Chrome, and downloaded Chrome for Testing were reused. No dependencies were installed for this increment.
+Use Node.js 20 or later and npm. Run these commands from the repository root to install test dependencies and run the logic and storage tests:
 
 ```powershell
-Set-Location D:\checkDraftExtension
+npm.cmd ci
 npm.cmd test
+```
+
+The browser suite currently expects Windows, an installed Google Chrome, and Playwright Chromium in the repository's `.playwright-browsers` folder:
+
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/.playwright-browsers"
+npx.cmd playwright install chromium
 npm.cmd run test:browser
 ```
 
-Node tests exercise production checker exports and the worker's actual message handler with synthetic Chrome storage and failure injection. Browser fixtures use installed Chrome. The unpacked-extension test uses `.playwright-browsers/chromium-1255/chrome-win64/chrome.exe` in a disposable profile and intercepts Gmail-origin navigation with synthetic HTML. It exercises actual isolated content scripts, extension messages, storage, the options form, concurrent revisions, committed saves with lost acknowledgements, malformed legacy state, and service-worker stop/recovery. It never connects to a mailbox. Test screenshots and reports are under ignored `test-results/`.
+There is no build step. After changing extension files, reload the extension at `chrome://extensions`, then reload Gmail.
+
+| File | Responsibility |
+| --- | --- |
+| `manifest.json` | Extension registration, permissions, and Gmail content scripts. |
+| `extract.js` | Extract compose fields, recipients, and attachment filenames. |
+| `content.js` | Compose controls, analysis requests, and results display. |
+| `checker.js` | Consistency rules and saved-context validation. |
+| `background.js` | Analysis messages, saved context, and installation injection. |
+| `options.html`, `options.js`, `options.css` | Opportunity editor and save recovery. |
+| `tests/` | Node tests and Playwright browser fixtures. |
+
+## Verification reference
+
+Node tests exercise production checker exports and the worker's actual message handler with synthetic Chrome storage and failure injection. Browser fixtures use installed Chrome. The unpacked-extension test uses the last sorted `chromium-*` folder under `.playwright-browsers`, with the Windows binary at `chrome-win64/chrome.exe`, in a disposable profile and intercepts Gmail-origin navigation with synthetic HTML. It exercises actual isolated content scripts, extension messages, storage, the options form, concurrent revisions, committed saves with lost acknowledgements, malformed legacy state, and service-worker stop/recovery. It never connects to a mailbox. Test screenshots and reports are under ignored `test-results/`.
 
 The tests cover exact findings and offsets, aliases, legacy projection, form conversion without CRLF loss, failed conversion, unknown legacy fields, saved-byte limits, duplicate recipient opportunities, separate selections, selection/fact changes during analysis, cancellation, timeouts, late responses, replacement/reopened editors, recovery, quotations/signatures, read-only hostile-text rendering, dense display pages, opposite-end evidence, input limits, popup bounds, native toolbar size, footer replacement, and normal/narrow/zoom-equivalent widths.
 
