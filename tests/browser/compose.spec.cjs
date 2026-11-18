@@ -2,11 +2,11 @@ const { test, expect } = require('@playwright/test');
 const path = require('node:path');
 const project = path.resolve(__dirname, '../..');
 
-function compose(id, variant = 'new', body = 'Hi Sam,\nI am interested in an internship at Brumby.') {
+function compose(id, variant = 'new', body = 'Hi Recipient,\nI am interested in an internship at Example Company.') {
   const root = variant === 'reply' ? 'ip' : 'M9';
   return `<div id="${id}" class="${root}" ${variant === 'popout' ? 'role="dialog"' : ''}>
-    <input name="subjectbox" value="Internship interest at Seeing Systems">
-    <div><span email="sam@brumby.com" name="Sam">Sam</span><input name="to" value="sam@brumby.com" type="hidden"></div>
+    <input name="subjectbox" value="Internship interest at Other Company">
+    <div><span email="recipient@example.test" name="Recipient">Recipient</span><input name="to" value="recipient@example.test" type="hidden"></div>
     <div class="aQH"></div>
     <div role="textbox" contenteditable="true" g_editable="true" aria-multiline="true" style="white-space:pre-wrap">${body}</div>
   </div>`;
@@ -51,17 +51,17 @@ for (const variant of ['new', 'reply', 'forward', 'popout']) {
     await expect(control(page, 'second')).toHaveCount(1);
     await control(page, 'first').click();
     await expect(status(page, 'first')).toContainText('to review');
-    await expect(page.locator('#first')).toContainText('interest at Seeing Systems');
-    await expect(page.locator('#first')).toContainText('sam@brumby.com');
+    await expect(page.locator('#first')).toContainText('interest at Other Company');
+    await expect(page.locator('#first')).toContainText('recipient@example.test');
     await expect(status(page, 'second')).toHaveText('Local, read-only checks. Runs only when selected.');
     const snapshots = await page.evaluate(() => window.calls.filter(c => c.type === 'analyze'));
     expect(snapshots).toHaveLength(1);
-    expect(snapshots[0].draft.body).toContain('internship at Brumby');
+    expect(snapshots[0].draft.body).toContain('internship at Example Company');
   });
 }
 
 test('multiple drafts remain isolated through navigation, rerender, minimize, close and reopen', async ({ page }) => {
-  await init(page, compose('first') + compose('second', 'reply', 'Hi Sam,\n[NAME]'));
+  await init(page, compose('first') + compose('second', 'reply', 'Hi Recipient,\n[NAME]'));
   await control(page, 'second').click();
   await expect(status(page, 'second')).toContainText('1 confirmed');
   await page.locator('#second').evaluate(root => root.hidden = true);
@@ -81,7 +81,7 @@ test('multiple drafts remain isolated through navigation, rerender, minimize, cl
 });
 
 test('structured quotes/signatures excluded; ambiguous and post-quote new text kept exactly', async ({ page }) => {
-  await init(page, compose('first', 'new', 'Hi Sam,<div>你好 👩🏽‍💻 é   </div><div class="gmail_quote">[COMPANY] quoted</div><div>new [NAME]</div><div class="gmail_signature" data-smartmail="gmail_signature">[ROLE] signature</div><blockquote>unmarked [DATE]</blockquote>'));
+  await init(page, compose('first', 'new', 'Hi Recipient,<div>你好 👩🏽‍💻 é   </div><div class="gmail_quote">[COMPANY] quoted</div><div>new [NAME]</div><div class="gmail_signature" data-smartmail="gmail_signature">[ROLE] signature</div><blockquote>unmarked [DATE]</blockquote>'));
   await control(page, 'first').click();
   await expect(status(page, 'first')).toContainText('2 confirmed');
   const draft = await page.evaluate(() => window.calls.find(c => c.type === 'analyze').draft);
@@ -95,7 +95,7 @@ test('structured quotes/signatures excluded; ambiguous and post-quote new text k
 
 test('read-only checks preserve exact Unicode multiline evidence and render hostile text safely', async ({ page }) => {
   await init(page);
-  const body = '\tHi Sam,\n\n你好 👩🏽‍💻 é  [NAME]\r\n  <img src=x onerror="window.pwned=1">  ';
+  const body = '\tHi Recipient,\n\n你好 👩🏽‍💻 é  [NAME]\r\n  <img src=x onerror="window.pwned=1">  ';
   await page.locator('#first [contenteditable]').evaluate((editor, value) => editor.textContent = value, body);
   const before = await page.locator('#first [contenteditable]').evaluate(editor => editor.innerHTML);
   await control(page, 'first').click();
@@ -109,7 +109,7 @@ test('read-only checks preserve exact Unicode multiline evidence and render host
 });
 
 test('mutations in every relevant field invalidate displayed success', async ({ page }) => {
-  await init(page, compose('first', 'new', 'Hi Sam,\nAll fine.'));
+  await init(page, compose('first', 'new', 'Hi Recipient,\nAll fine.'));
   await page.locator('[name="subjectbox"]').fill('Hello');
   for (const field of ['body', 'subject', 'recipient', 'attachment', 'context']) {
     await control(page, 'first').click();
@@ -117,7 +117,7 @@ test('mutations in every relevant field invalidate displayed success', async ({ 
     await page.evaluate(field => {
       if (field === 'body') document.querySelector('[contenteditable]').append('changed');
       if (field === 'subject') { const input = document.querySelector('[name="subjectbox"]'); input.value = 'Changed'; input.dispatchEvent(new Event('input', { bubbles: true })); }
-      if (field === 'recipient') document.querySelector('[email]').setAttribute('name', 'Sam Jones');
+      if (field === 'recipient') document.querySelector('[email]').setAttribute('name', 'Recipient Other');
       if (field === 'attachment') document.querySelector('.aQH').innerHTML = '<span class="aV3">résumé.pdf</span>';
       if (field === 'context') { window.contextValue.revision++; for (const listener of window.contextListeners) listener({ recipientContext: {} }, 'local'); }
     }, field);
@@ -170,12 +170,12 @@ test('storage, extraction, layout and timeout failures stay visibly incomplete a
 });
 
 test('inherited reply subject and unknown attachment layout are pending, never silently filtered', async ({ page }) => {
-  await init(page, `<div class="thread"><h2 class="hP">Internship interest at Seeing Systems</h2>${compose('first', 'reply')}</div>`);
+  await init(page, `<div class="thread"><h2 class="hP">Internship interest at Other Company</h2>${compose('first', 'reply')}</div>`);
   await page.locator('[name="subjectbox"]').evaluate(node => node.remove());
   await page.locator('.aQH').evaluate(node => node.innerHTML = '<span>unknown-file.pdf</span>');
   await control(page, 'first').click();
   const draft = await page.evaluate(() => window.calls.find(c => c.type === 'analyze').draft);
-  expect(draft.subject).toBe('Internship interest at Seeing Systems');
+  expect(draft.subject).toBe('Internship interest at Other Company');
   expect(draft.pending.some(p => p.includes('exact outgoing subject'))).toBe(true);
   expect(draft.pending.some(p => p.includes('attachment layout'))).toBe(true);
   await expect(page.locator('#first')).toContainText('Incomplete coverage');
@@ -220,7 +220,7 @@ test('all findings remain accessible across pages without truncation or duplicat
 });
 
 test('programmatic subject changes without events invalidate results on the snapshot watcher', async ({ page }) => {
-  await init(page, compose('first', 'new', 'Hi Sam, all fine.'));
+  await init(page, compose('first', 'new', 'Hi Recipient, all fine.'));
   await page.locator('[name="subjectbox"]').fill('Hello');
   await control(page, 'first').click();
   await expect(status(page, 'first')).toHaveText('No inconsistencies found in the completed checks.');
@@ -244,9 +244,9 @@ test('results stay within the viewport without displacing Gmail compose fields o
     .M9{position:fixed;top:80px;bottom:12px;right:12px;width:600px;display:flex;flex-direction:column;background:white}
     .compose-fields{flex:1;min-height:0;overflow:auto}.btC{flex:none;padding:8px;display:flex;gap:8px;align-items:center}
   </style><header>Gmail header</header><div id="first" class="M9">
-    <div class="compose-fields"><input name="subjectbox" value="Internship interest at Seeing Systems">
-    <span email="sam@brumby.com" name="Sam">Sam</span><div class="aQH"></div>
-    <div role="textbox" contenteditable="true" g_editable="true">Hi Pat,<br>[NAME]<br>Please find attached my CV.<br>Target role: Research intern<br>Target role: Sales lead</div></div>
+    <div class="compose-fields"><input name="subjectbox" value="Internship interest at Other Company">
+    <span email="recipient@example.test" name="Recipient">Recipient</span><div class="aQH"></div>
+    <div role="textbox" contenteditable="true" g_editable="true">Hi Colleague,<br>[NAME]<br>Please find attached my CV.<br>Target role: Research intern<br>Target role: Sales lead</div></div>
     <div class="btC"><button type="button">Send</button></div>
   </div>`);
   const subject = page.locator('[name="subjectbox"]');
@@ -307,8 +307,8 @@ for (const zoom of [1, 2]) {
       .native-actions{width:100%;border-collapse:collapse;height:40px}.btC{height:40px;white-space:nowrap;padding:0}
       .native-actions button{font:13px Arial;padding:6px;border:0;background:transparent}.native-actions button:first-child{background:#0b57d0;color:white;border-radius:20px;padding:10px 16px}
     </style><div id="first" class="M9">
-      <input name="subjectbox" value="Hello"><span email="sam@brumby.com" name="Sam">Sam</span><div class="aQH"></div>
-      <div role="textbox" contenteditable="true" g_editable="true">Hi Sam, [NAME]</div>
+      <input name="subjectbox" value="Hello"><span email="recipient@example.test" name="Recipient">Recipient</span><div class="aQH"></div>
+      <div role="textbox" contenteditable="true" g_editable="true">Hi Recipient, [NAME]</div>
       <div class="aDh"><div class="formatting">Undo　Redo　 Sans Serif　 B　 I　 U</div>
       <table class="native-actions"><tbody><tr><td class="btC"><button type="button">Send</button><button type="button">Formatting</button><button type="button">Attach</button><button type="button">Link</button><button type="button">More</button><button type="button">Discard</button></td></tr></tbody></table></div>
     </div>`);
@@ -342,8 +342,8 @@ test('opportunity selection stays with its editor and selection/fact changes can
   await init(page, compose('first') + compose('second'));
   await page.evaluate(() => {
     window.contextValue = { version: 2, revision: 1, facts: [
-      { id: 'research', email: 'sam@brumby.com', company: 'Brumby', role: 'research internship' },
-      { id: 'sales', email: 'sam@brumby.com', company: 'Seeing Systems', role: 'sales position' }
+      { id: 'research', email: 'recipient@example.test', company: 'Example Company', role: 'research internship' },
+      { id: 'sales', email: 'recipient@example.test', company: 'Other Company', role: 'sales position' }
     ] };
     for (const listener of window.contextListeners) listener({ recipientContext: {} }, 'local');
   });
@@ -388,9 +388,9 @@ test('opportunity selection stays with its editor and selection/fact changes can
 });
 
 test('classified previous employment keeps complete evidence and other checks active in the popover', async ({ page }) => {
-  const previous = 'My previous role was in sales at Seeing Systems.';
-  await init(page, compose('first', 'new', previous + ' I’m applying for the research internship at Brumby in Sydney.'));
-  await page.locator('[name="subjectbox"]').fill('Application for the research internship at Brumby');
+  const previous = 'My previous role was in sales at Other Company.';
+  await init(page, compose('first', 'new', previous + ' I’m applying for the research internship at Example Company in City A.'));
+  await page.locator('[name="subjectbox"]').fill('Application for the research internship at Example Company');
   await control(page, 'first').click();
   await expect(status(page, 'first')).toHaveText('No inconsistencies found in the completed checks.');
   await page.getByText('Coverage and incomplete checks', { exact: true }).click();

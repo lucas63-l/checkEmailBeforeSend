@@ -1,20 +1,20 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { analyze, validateContext, emptyContext, MAX_DRAFT, MAX_WIRE } = require('../checker.js');
-const draft = changes => ({ opportunityId: 'legacy-0', recipients: [{ email: 'sam@brumby.com', name: 'Sam' }], subject: '', body: '', rawBody: '', rawHtml: '', attachments: [], pending: [], excluded: [], ...changes });
-const context = { revision: 1, facts: [{ email: 'sam@brumby.com', name: 'Sam', aliases: ['Samuel'], company: 'Brumby', companyAliases: ['Brumby Ltd'], role: 'Research intern', location: 'Sydney', date: '2026-12-01', time: '10:00 AEST' }, { email: 'pat@seeing.com', name: 'Pat Jones', company: 'Seeing Systems', role: 'Sales lead' }] };
+const draft = changes => ({ opportunityId: 'legacy-0', recipients: [{ email: 'recipient@example.test', name: 'Recipient' }], subject: '', body: '', rawBody: '', rawHtml: '', attachments: [], pending: [], excluded: [], ...changes });
+const context = { revision: 1, facts: [{ email: 'recipient@example.test', name: 'Recipient', aliases: ['Recipient Alias'], company: 'Example Company', companyAliases: ['Example Company Ltd'], role: 'Research intern', location: 'City A', date: '2026-12-01', time: '10:00 UTC' }, { email: 'colleague@other.example', name: 'Colleague Other', company: 'Other Company', role: 'Sales lead' }] };
 
-test('motivating incident yields exact subject and recipient evidence without setup', () => {
-  const result = analyze(draft({ subject: 'Internship interest at Seeing Systems', body: 'Hi Sam,\nI am interested in an internship at Brumby.' }), emptyContext());
+test('cross-company draft yields exact subject and recipient evidence without setup', () => {
+  const result = analyze(draft({ subject: 'Internship interest at Other Company', body: 'Hi Recipient,\nI am interested in an internship at Example Company.' }), emptyContext());
   const cross = result.findings.find(f => f.code === 'company-across-fields');
   assert.ok(cross);
   assert.equal(cross.certainty, 'Review');
-  assert.deepEqual(cross.evidence.map(e => e.text), ['Internship interest at Seeing Systems', 'internship at Brumby.']);
-  assert.ok(result.findings.find(f => f.code === 'domain-company').evidence.some(e => e.text === 'sam@brumby.com'));
+  assert.deepEqual(cross.evidence.map(e => e.text), ['Internship interest at Other Company', 'internship at Example Company.']);
+  assert.ok(result.findings.find(f => f.code === 'domain-company').evidence.some(e => e.text === 'recipient@example.test'));
 });
 
 test('greeting mismatch, all supported labels, filename conflict and placeholder have evidence', () => {
-  const result = analyze(draft({ body: 'Dear Pat,\nRecipient name: Pat\nTarget company: Seeing Systems\nTarget role: Sales lead\nTarget location: London\nEvent date: 2026-12-02\nEvent time: 11:00 AEST\n[COMPANY]', attachments: ['Seeing_Systems-cover-letter.pdf'] }), context);
+  const result = analyze(draft({ body: 'Dear Colleague,\nRecipient name: Colleague\nTarget company: Other Company\nTarget role: Sales lead\nTarget location: City B\nEvent date: 2026-12-02\nEvent time: 11:00 UTC\n[COMPANY]', attachments: ['Other_Company-cover-letter.pdf'] }), context);
   for (const code of ['greeting', 'context-name', 'context-company', 'context-role', 'context-location', 'context-date', 'context-time', 'attachment-context', 'placeholder']) {
     assert.ok(result.findings.some(f => f.code === code && f.evidence.length > 0), code);
   }
@@ -22,7 +22,7 @@ test('greeting mismatch, all supported labels, filename conflict and placeholder
 });
 
 test('different entities, dates and aliases are legitimate; no arbitrary name/date scanning', () => {
-  const result = analyze(draft({ subject: 'Internship interest at Brumby Ltd', body: 'Hi Samuel,\nAt Seeing Systems I worked with Pat. I moved from London to Sydney.\nThe first interview was 2026-11-01; the second is 2026-12-01.\nTarget company: Brumby Ltd\nTarget role: Research intern\nEvent date: 2026-12-01' }), context);
+  const result = analyze(draft({ subject: 'Internship interest at Example Company Ltd', body: 'Hi Recipient Alias,\nAt Other Company I worked with Colleague. I moved from City B to City A.\nThe first interview was 2026-11-01; the second is 2026-12-01.\nTarget company: Example Company Ltd\nTarget role: Research intern\nEvent date: 2026-12-01' }), context);
   assert.deepEqual(result.findings, []);
   assert.ok(result.pending.some(p => p.includes('semantic')));
   assert.ok(result.completed.length > 0);
@@ -48,7 +48,7 @@ test('empty and multiple-recipient drafts retain incomplete checks', () => {
   const result = analyze(draft({ recipients: [] }), emptyContext());
   assert.equal(result.findings.length, 0);
   assert.ok(result.pending.some(p => p.includes('recipient')));
-  const group = analyze(draft({ recipients: [{ email: 'sam@brumby.com', name: 'Sam' }, { email: 'pat@seeing.com', name: 'Pat' }], body: 'Hello Pat,' }), context);
+  const group = analyze(draft({ recipients: [{ email: 'recipient@example.test', name: 'Recipient' }, { email: 'colleague@other.example', name: 'Colleague' }], body: 'Hello Colleague,' }), context);
   assert.ok(!group.findings.some(f => f.code === 'greeting'));
 });
 
@@ -57,7 +57,7 @@ test('UTF-16 limits are exact; oversized opposite-end evidence is never partiall
   const overhead = base.recipients[0].email.length + base.recipients[0].name.length;
   const text = 'x'.repeat(MAX_DRAFT - overhead);
   assert.ok(analyze(draft({ body: text, rawBody: text }), context).completed.length > 0);
-  const over = 'Target company: Seeing Systems\n' + text + '\nTarget company: Brumby';
+  const over = 'Target company: Other Company\n' + text + '\nTarget company: Example Company';
   const result = analyze(draft({ body: over, rawBody: over }), context);
   assert.deepEqual(result.completed, []);
   assert.deepEqual(result.findings, []);
@@ -67,7 +67,7 @@ test('UTF-16 limits are exact; oversized opposite-end evidence is never partiall
 });
 
 test('Unicode, whitespace, line breaks and exact evidence offsets survive JSON', () => {
-  const body = 'Hi Sam,\n\n\t你好 👩🏽‍💻 e\u0301\u00a0 — [NAME]\r\n  end  ';
+  const body = 'Hi Recipient,\n\n\t你好 👩🏽‍💻 e\u0301\u00a0 — [NAME]\r\n  end  ';
   const snapshot = draft({ body, rawBody: body });
   const restored = JSON.parse(JSON.stringify(snapshot));
   const result = analyze(restored, context);
@@ -79,8 +79,8 @@ test('Unicode, whitespace, line breaks and exact evidence offsets survive JSON',
 
 test('invalid context rejects whole update, including duplicate identities and size limits', () => {
   assert.equal(validateContext(context), context);
-  for (const invalid of [ { revision: 0, facts: [{ email: 'bad' }] }, { revision: 0, facts: [context.facts[0], context.facts[0]] }, { revision: 0, facts: [{ email: 'a@b.com', company: '' }] }, { revision: 0, facts: [{ email: 'a@b.com', aliases: Array(11).fill('a') }] }, { revision: 0, facts: [{ email: 'a@b.com', role: 'x'.repeat(201) }] }, { revision: 0, facts: [{ email: 'a@b.com', extra: 'x' }] } ]) assert.throws(() => validateContext(invalid));
-  const large = { revision: 0, facts: Array.from({ length: 50 }, (_, i) => ({ email: `${i}@b.com`, name: 'Name', aliases: Array(10).fill('界'.repeat(200)) })) };
+  for (const invalid of [ { revision: 0, facts: [{ email: 'bad' }] }, { revision: 0, facts: [context.facts[0], context.facts[0]] }, { revision: 0, facts: [{ email: 'a@example.test', company: '' }] }, { revision: 0, facts: [{ email: 'a@example.test', aliases: Array(11).fill('a') }] }, { revision: 0, facts: [{ email: 'a@example.test', role: 'x'.repeat(201) }] }, { revision: 0, facts: [{ email: 'a@example.test', extra: 'x' }] } ]) assert.throws(() => validateContext(invalid));
+  const large = { revision: 0, facts: Array.from({ length: 50 }, (_, i) => ({ email: `${i}@example.test`, name: 'Name', aliases: Array(10).fill('界'.repeat(200)) })) };
   assert.throws(() => validateContext(large), /48,000/);
 });
 
@@ -90,22 +90,22 @@ test('malformed input is failure, not empty success', () => {
 });
 
 test('sentence-initial company phrase and explicit filename target work with just one saved recipient', () => {
-  const result = analyze(draft({ subject: 'Application at Seeing Systems', body: 'Internship at Brumby', attachments: ['Cover_letter_for_Seeing_Systems.pdf'] }), { revision: 0, facts: [context.facts[0]] });
+  const result = analyze(draft({ subject: 'Application at Other Company', body: 'Internship at Example Company', attachments: ['Cover_letter_for_Other_Company.pdf'] }), { revision: 0, facts: [context.facts[0]] });
   assert.ok(result.findings.some(f => f.code === 'target-company'));
   assert.ok(result.findings.some(f => f.code === 'company-across-fields'));
-  assert.ok(result.findings.some(f => f.code === 'attachment-target' && f.evidence[0].text === 'Cover_letter_for_Seeing_Systems.pdf'));
-  assert.throws(() => validateContext({ revision: 0, facts: [{ email: 'a@b.com', aliases: ['A'] }] }), /canonical/);
+  assert.ok(result.findings.some(f => f.code === 'attachment-target' && f.evidence[0].text === 'Cover_letter_for_Other_Company.pdf'));
+  assert.throws(() => validateContext({ revision: 0, facts: [{ email: 'a@example.test', aliases: ['A'] }] }), /canonical/);
 });
 
 const { opportunities, MAX_OPPORTUNITY_BYTES } = require('../checker.js');
 const opportunityContext = { version: 2, revision: 3, facts: [
-  { id: 'research', email: 'sam@brumby.com', name: 'Sam', aliases: ['Samuel'], company: 'Brumby', companyAliases: ['Brumby Ltd'], role: 'research internship', location: 'Sydney' },
-  { id: 'sales', email: 'sam@brumby.com', company: 'Seeing Systems', role: 'sales position' }
+  { id: 'research', email: 'recipient@example.test', name: 'Recipient', aliases: ['Recipient Alias'], company: 'Example Company', companyAliases: ['Example Company Ltd'], role: 'research internship', location: 'City A' },
+  { id: 'sales', email: 'recipient@example.test', company: 'Other Company', role: 'sales position' }
 ] };
 
 test('ordinary application prose compares every company and role with exact original evidence', () => {
-  const subject = 'Application for the sales position at Seeing Systems';
-  const body = '👩🏽‍💻 I’m applying for the research internship at Brumby in Sydney.\n' + 'x'.repeat(150000) + '\nI am applying for the sales position at Seeing Systems.';
+  const subject = 'Application for the sales position at Other Company';
+  const body = '👩🏽‍💻 I’m applying for the research internship at Example Company in City A.\n' + 'x'.repeat(150000) + '\nI am applying for the sales position at Other Company.';
   const input = draft({ opportunityId: 'research', subject, body, rawBody: body });
   const result = analyze(input, opportunityContext);
   for (const code of ['target-company', 'target-role', 'company-across-fields', 'role-across-fields']) assert.ok(result.findings.some(f => f.code === code), code);
@@ -122,21 +122,21 @@ test('ordinary application prose compares every company and role with exact orig
 });
 
 test('explicit previous employment is retained as scoped exclusion, aliases preserve intended application', () => {
-  const previous = 'My previous role was in sales at Seeing Systems.';
-  const body = previous + ' I’m applying for the research internship at Brumby Ltd in Sydney.';
+  const previous = 'My previous role was in sales at Other Company.';
+  const body = previous + ' I’m applying for the research internship at Example Company Ltd in City A.';
   const result = analyze(draft({ opportunityId: 'research', body, rawBody: body }), opportunityContext);
   assert.deepEqual(result.findings, []);
   assert.equal(result.excluded.length, 1);
   assert.equal(result.excluded[0].text, previous);
   assert.equal(body.slice(result.excluded[0].start, result.excluded[0].end), previous);
   assert.match(result.excluded[0].reason, /only from target/);
-  const stillChecked = analyze(draft({ opportunityId: 'research', body: 'My previous role was [ROLE]. I’m applying for the sales position at Seeing Systems.' }), opportunityContext);
+  const stillChecked = analyze(draft({ opportunityId: 'research', body: 'My previous role was [ROLE]. I’m applying for the sales position at Other Company.' }), opportunityContext);
   for (const code of ['placeholder', 'target-company', 'target-role']) assert.ok(stillChecked.findings.some(f => f.code === code));
 });
 
 test('selection is explicit, duplicate recipient opportunities remain distinct and mismatched recipient stays pending', () => {
   assert.equal(validateContext(opportunityContext), opportunityContext);
-  const input = { subject: 'Application for the sales position at Seeing Systems', body: 'I’m applying for the research internship at Brumby.' };
+  const input = { subject: 'Application for the sales position at Other Company', body: 'I’m applying for the research internship at Example Company.' };
   const none = analyze(draft({ ...input, opportunityId: '' }), opportunityContext);
   assert.ok(none.pending.some(p => /explicit opportunity selection/.test(p)));
   assert.ok(!none.findings.some(f => /^target-/.test(f.code)));
@@ -144,15 +144,15 @@ test('selection is explicit, duplicate recipient opportunities remain distinct a
   const sales = analyze(draft({ opportunityId: 'sales', subject: input.subject }), opportunityContext);
   assert.deepEqual(sales.findings, []);
   const mismatch = analyze(draft({ ...input, opportunityId: 'sales', recipients: [{ email: 'other@example.com', name: 'Other' }] }), opportunityContext);
-  assert.ok(mismatch.findings.some(f => f.code === 'opportunity-recipient' && f.evidence.some(e => e.text === 'sam@brumby.com')));
+  assert.ok(mismatch.findings.some(f => f.code === 'opportunity-recipient' && f.evidence.some(e => e.text === 'recipient@example.test')));
   assert.ok(!mismatch.findings.some(f => f.code === 'target-role'));
-  const many = analyze(draft({ opportunityId: 'research', subject: input.subject, recipients: [{ email: 'sam@brumby.com', name: 'Sam' }, { email: 'cc@example.com', name: 'CC' }] }), opportunityContext);
+  const many = analyze(draft({ opportunityId: 'research', subject: input.subject, recipients: [{ email: 'recipient@example.test', name: 'Recipient' }, { email: 'cc@example.com', name: 'CC' }] }), opportunityContext);
   assert.ok(many.findings.some(f => f.code === 'target-role'));
   assert.ok(many.pending.some(p => /greeting identity/.test(p)));
 });
 
 test('legacy projection preserves every field and alias exactly without mutating or writing its source', () => {
-  const legacy = { revision: 8, facts: [{ ...context.facts[0], name: '你好 👩🏽‍💻\r\n é  ', aliases: ['一\r\n二', 'Sam\t '], companyAliases: ['B\\"\r\n Ltd'] }, context.facts[1]] };
+  const legacy = { revision: 8, facts: [{ ...context.facts[0], name: '你好 👩🏽‍💻\r\n é  ', aliases: ['一\r\n二', 'Recipient\t '], companyAliases: ['B\\"\r\n Ltd'] }, context.facts[1]] };
   const before = JSON.stringify(legacy);
   const projected = opportunities(JSON.parse(before));
   assert.deepEqual(projected.map(({ id, ...fact }) => fact), legacy.facts);
@@ -167,8 +167,8 @@ test('opportunity count, IDs, canonical aliases and exact serialized byte bounda
   assert.throws(() => validateContext({ ...opportunityContext, facts: [opportunityContext.facts[0], opportunityContext.facts[0]] }), /unique/);
   assert.throws(() => validateContext({ ...opportunityContext, facts: Array(51).fill(opportunityContext.facts[0]) }), /50/);
   assert.throws(() => validateContext({ ...opportunityContext, facts: [{ ...opportunityContext.facts[0], id: 'x'.repeat(81) }] }), /ID/);
-  assert.throws(() => validateContext({ version: 2, revision: 0, facts: [{ id: 'one', email: 'a@b.com', companyAliases: ['B'] }] }), /canonical/);
-  const value = { version: 2, revision: 0, facts: Array.from({ length: 50 }, (_, i) => ({ id: `id-${i}`, email: `${i}@b.com`, name: 'Name', aliases: [] })) };
+  assert.throws(() => validateContext({ version: 2, revision: 0, facts: [{ id: 'one', email: 'a@example.test', companyAliases: ['B'] }] }), /canonical/);
+  const value = { version: 2, revision: 0, facts: Array.from({ length: 50 }, (_, i) => ({ id: `id-${i}`, email: `${i}@example.test`, name: 'Name', aliases: [] })) };
   let size = Buffer.byteLength(JSON.stringify(value));
   for (const fact of value.facts) {
     for (let i = 0; i < 10 && size < MAX_OPPORTUNITY_BYTES; i++) {
@@ -185,7 +185,7 @@ test('opportunity count, IDs, canonical aliases and exact serialized byte bounda
 });
 
 test('company extraction stops at sentence boundaries and visits later same-line application claims', () => {
-  const body = 'I’m applying for the research internship at Brumby. I’m applying for the sales position at Seeing Systems. I am applying for the research internship at Brumby Ltd.';
+  const body = 'I’m applying for the research internship at Example Company. I’m applying for the sales position at Other Company. I am applying for the research internship at Example Company Ltd.';
   const result = analyze(draft({ opportunityId: 'research', body, rawBody: body }), opportunityContext);
   assert.equal(result.findings.filter(f => f.code === 'target-company').length, 1);
   assert.equal(result.findings.filter(f => f.code === 'target-role').length, 1);
@@ -211,7 +211,7 @@ test('serialized envelope, recipients and filenames honor exact boundaries inclu
 
 test('cross-field company and role comparisons run without recipient identity or opportunity selection', () => {
   for (const recipients of [[], [{ email: 'one@example.com', name: '' }, { email: 'two@example.com', name: '' }]]) {
-    const result = analyze(draft({ opportunityId: '', recipients, subject: 'Application for the sales position at Seeing Systems', body: 'I’m applying for the research internship at Brumby.' }), emptyContext());
+    const result = analyze(draft({ opportunityId: '', recipients, subject: 'Application for the sales position at Other Company', body: 'I’m applying for the research internship at Example Company.' }), emptyContext());
     assert.ok(result.findings.some(f => f.code === 'company-across-fields'));
     assert.ok(result.findings.some(f => f.code === 'role-across-fields'));
     assert.ok(result.pending.some(p => /greeting and filename/.test(p)));
@@ -237,9 +237,9 @@ test('every legacy record at its exact byte limit fits conversion without alteri
 });
 
 test('unknown opportunity facts including email stay optional and leave specific coverage pending', () => {
-  const partial = { version: 2, revision: 0, facts: [{ id: 'unknown-email', company: 'Brumby', role: 'research internship' }, { id: 'unknown-company', email: 'sam@brumby.com' }] };
+  const partial = { version: 2, revision: 0, facts: [{ id: 'unknown-email', company: 'Example Company', role: 'research internship' }, { id: 'unknown-company', email: 'recipient@example.test' }] };
   validateContext(partial);
-  const input = draft({ opportunityId: 'unknown-email', subject: 'Application for the sales position at Seeing Systems', attachments: ['Cover_letter_for_Seeing_Systems.pdf'] });
+  const input = draft({ opportunityId: 'unknown-email', subject: 'Application for the sales position at Other Company', attachments: ['Cover_letter_for_Other_Company.pdf'] });
   const result = analyze(input, partial);
   for (const code of ['target-company', 'target-role', 'attachment-target']) assert.ok(result.findings.some(f => f.code === code), code);
   assert.ok(result.pending.some(p => /recipient email is unknown/.test(p)));
@@ -248,12 +248,12 @@ test('unknown opportunity facts including email stay optional and leave specific
   const unknownLayout = analyze({ ...input, pending: ['Unrecognized compose container; field association requires review.'] }, partial);
   assert.ok(unknownLayout.findings.some(f => f.code === 'opportunity-recipient'));
   assert.ok(unknownLayout.pending.some(p => /explicit opportunity selection/.test(p)));
-  assert.doesNotThrow(() => analyze(draft({ opportunityId: '', attachments: ['Brumby-cover-letter.pdf'] }), partial));
+  assert.doesNotThrow(() => analyze(draft({ opportunityId: '', attachments: ['Example Company-cover-letter.pdf'] }), partial));
 });
 
 test('previous-employment classification ends at a line break without consuming the following application', () => {
-  const previous = 'My previous role was a sales position at Seeing Systems';
-  const body = previous + '\r\nI’m applying for the research internship at Brumby.';
+  const previous = 'My previous role was a sales position at Other Company';
+  const body = previous + '\r\nI’m applying for the research internship at Example Company.';
   const result = analyze(draft({ opportunityId: 'research', body, rawBody: body }), opportunityContext);
   assert.deepEqual(result.findings, []);
   assert.equal(result.excluded[0].text, previous);

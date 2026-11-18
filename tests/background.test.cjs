@@ -29,29 +29,29 @@ function setup(initial = { revision: 0, facts: [] }) {
 test('context saves serialize and reject stale concurrent revisions without partial updates', async () => {
   const app = setup();
   const [first, second] = await Promise.all([
-    app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'sam@brumby.com', name: 'Sam' }] } }),
-    app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'pat@seeing.com', name: 'Pat' }] } })
+    app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'recipient@example.test', name: 'Recipient' }] } }),
+    app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'colleague@other.example', name: 'Colleague' }] } })
   ]);
   assert.equal(first.ok, true);
   assert.equal(second.ok, false);
   assert.match(second.error, /changed in another window/);
-  assert.deepEqual(app.stored().recipientContext, { revision: 1, facts: [{ email: 'sam@brumby.com', name: 'Sam' }] });
+  assert.deepEqual(app.stored().recipientContext, { revision: 1, facts: [{ email: 'recipient@example.test', name: 'Recipient' }] });
 });
 
 test('storage failures and invalid whole updates preserve last valid state and allow recovery', async () => {
   const app = setup();
   const before = structuredClone(app.stored());
   app.setFailure('set');
-  const fail = await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'sam@brumby.com' }] } });
+  const fail = await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'recipient@example.test' }] } });
   assert.equal(fail.ok, false);
   assert.match(fail.error, /Write failed/);
   assert.deepEqual(app.stored(), before);
   app.setFailure('get');
   assert.equal((await app.request({ type: 'context:get' })).ok, false);
   app.setFailure(null);
-  assert.equal((await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'sam@brumby.com' }, { email: 'bad' }] } })).ok, false);
+  assert.equal((await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'recipient@example.test' }, { email: 'bad' }] } })).ok, false);
   assert.deepEqual(app.stored(), before);
-  assert.equal((await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'sam@brumby.com' }] } })).ok, true);
+  assert.equal((await app.request({ type: 'context:save', context: { revision: 0, facts: [{ email: 'recipient@example.test' }] } })).ok, true);
 });
 
 test('trust boundary restricts writers and analysis checks the context revision', async () => {
@@ -83,7 +83,7 @@ test('failed automatic injection remains visible in installation diagnostics', a
 });
 
 test('read-only legacy projection and interrupted conversion preserve committed records and retry safely', async () => {
-  const legacy = { revision: 7, facts: [{ email: 'sam@brumby.com', name: '你好 👩🏽‍💻\r\n é  ', company: 'Brumby', aliases: ['Sam\r\nuel'], companyAliases: ['B\\" Ltd'] }] };
+  const legacy = { revision: 7, facts: [{ email: 'recipient@example.test', name: '你好 👩🏽‍💻\r\n é  ', company: 'Example Company', aliases: ['Recipient\r\nAlias'], companyAliases: ['B\\" Ltd'] }] };
   const app = setup(legacy);
   const response = await app.request({ type: 'context:get' });
   assert.deepEqual(app.stored().recipientContext, legacy);
@@ -114,8 +114,8 @@ test('malformed or oversized legacy state remains unresolved on reads, saves and
   for (const legacy of [
     null,
     { revision: 1, facts: [{ email: 'invalid', name: 'keep me' }] },
-    { revision: 1, facts: Array.from({ length: 50 }, (_, i) => ({ email: `${i}@b.com`, name: 'Name', aliases: Array(10).fill('界'.repeat(200)) })) },
-    { revision: 1, facts: [{ email: 'sam@brumby.com', unsupported: 'retain' }] }
+    { revision: 1, facts: Array.from({ length: 50 }, (_, i) => ({ email: `${i}@example.test`, name: 'Name', aliases: Array(10).fill('界'.repeat(200)) })) },
+    { revision: 1, facts: [{ email: 'recipient@example.test', unsupported: 'retain' }] }
   ]) {
     const app = setup(legacy);
     assert.equal((await app.request({ type: 'context:get' })).ok, false);
@@ -126,10 +126,10 @@ test('malformed or oversized legacy state remains unresolved on reads, saves and
 });
 
 test('worker restart reads the complete committed context and prevents a legacy writer from dropping opportunity IDs', async () => {
-  const committed = { version: 2, revision: 9, facts: [{ id: 'first', email: 'sam@brumby.com', role: 'research internship' }, { id: 'second', email: 'sam@brumby.com', role: 'sales position' }] };
+  const committed = { version: 2, revision: 9, facts: [{ id: 'first', email: 'recipient@example.test', role: 'research internship' }, { id: 'second', email: 'recipient@example.test', role: 'sales position' }] };
   const restarted = setup(structuredClone(committed));
   assert.deepEqual((await restarted.request({ type: 'context:get' })).context, committed);
-  const result = await restarted.request({ type: 'context:save', context: { revision: 9, facts: [{ email: 'sam@brumby.com' }] } });
+  const result = await restarted.request({ type: 'context:save', context: { revision: 9, facts: [{ email: 'recipient@example.test' }] } });
   assert.equal(result.ok, false);
   assert.match(result.error, /older options page/);
   assert.deepEqual(restarted.stored().recipientContext, committed);
